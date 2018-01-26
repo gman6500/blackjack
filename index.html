@@ -1,0 +1,167 @@
+<html>
+    <head>
+        
+    </head>
+    <body>
+        <p id="countDown"></p>
+        <div style="border:2px solid black">
+            <p id="name"></p>
+            <h1 id="total"></h1>
+            <ol id="hand">
+
+            </ol>
+        </div>
+        <button onClick="hit()" id="hitBut" style="display:hidden">
+            Hit
+        </button>
+        <button onClick="stay()" id="stayBut" style="display:hidden">
+            Stay
+        </button>
+        <ul id="events">
+            
+        </ul>
+        <script src="/jquery/dist/jquery.js"></script>
+        <script src="/socket.io/socket.io.js"></script>
+        <script>
+            $("#hitBut").hide();
+            $("#stayBut").hide();
+            var socket=io.connect("https://balsa-jazz-4200.codio.io")
+            var myName;
+            var myself;
+            var myId;
+            var allPlayers;
+            function getSendName(){
+                var temp=prompt("Please enter a screen name","Jeef")
+                $("#name").text(temp)
+                myName=temp
+                socket.emit('join',temp)
+            }
+            function addCard(card){
+                var newCard=$('<li></li>').addClass('card');
+                newCard.text(card)
+                newCard.attr("id","newCard")
+                newCard.appendTo('ol#hand')
+            }
+            
+            function hit(){
+                socket.emit('hitme',myId)
+            }
+            function stay(){
+                var temp=JSON.stringify(myself)
+                socket.emit('stay',temp);
+            }
+            function addEvent(event){
+                $("#events").append("<li>"+event+"</li>")
+            }
+            socket.on('countDown',function(data){
+                $("#countDown").show();
+                $("#countDown").text("Game starts in: "+data);
+                if(data<=0){
+                    $("#countDown").hide();
+                }
+            })
+            socket.on('newCard',function(data){
+                myself.cards.push(data);
+                addCard(data.value+" of "+data.suit);
+                myself.totalVal=recalculateTotalVal(myself);
+                $("#total").text(myself.totalVal);
+                addEvent("You drew a card: "+data.value+" of "+data.suit)
+                if(myself.totalVal>21){
+                    myself.busted=true;
+                    var temp=JSON.stringify(myself)
+
+                    socket.emit("busted",temp);
+                    
+                    addEvent("You Busted!")
+                }
+            })
+            
+            socket.on('playerBusted',function(data){
+                var bustedPlayer=JSON.parse(data);
+                var eventString=bustedPlayer.name+" has busted at :"+bustedPlayer.totalVal+". They had: ";
+                for(i=0;i<bustedPlayer.cards.length;i++){
+                    eventString=eventString+bustedPlayer.cards[i].value+" of "+bustedPlayer.cards[i].suit+". ";
+                }
+                addEvent(eventString);
+            })
+            
+            socket.on('otherPlayerHit',function(data){
+                addEvent(data.name+" hit, they got: "+data.value+" of "+data.suit)
+            })
+            socket.on('playerleft',function(data){
+                var leftPlayer=JSON.parse(data)
+                addEvent(leftPlayer.name+" has left the game")
+            })
+            socket.on("connection",function(data){
+                
+            })
+            socket.on("gameOver",function(data){
+                //write out the winner
+                addEvent("Congratulations! "+data+" won the game!")
+                $("#hitBut").hide();
+                $("#stayBut").hide();
+            })
+            socket.on("resetNotification",function(data){
+                addEvent(data);
+            })
+            socket.on("reset",function(){
+                $("#hand").empty();
+                $("#total").empty();
+                $("#events").empty();
+            })
+            function recalculateTotalVal(player){
+                var total=0;
+                for(i=0;i<player.cards.length;i++){
+                    var temp= parseInt(player.cards[i].value);
+                    if(isNaN(temp)){
+                        if(player.cards[i].value=='a'){
+                            total+=11;
+                            if(total>21){
+                                total-=10;
+                            }
+                        }else{
+                            total+=10;
+                        }
+                    }else{
+                        total+=temp;
+                    }
+                }
+                return total;
+            }
+            getSendName();
+            socket.on('setId',function(data){
+                myId=data;
+            })
+            socket.on("startGame",function(data){
+                allPlayers=JSON.parse(data)
+                for(i=0;i<allPlayers.length;i++){
+                    if(allPlayers[i].id==myId){
+                        myself=allPlayers[i]
+                        break;
+                    }
+                }
+                addCard(myself.cards[0].value+" of "+myself.cards[0].suit)
+                addCard(myself.cards[1].value+" of "+myself.cards[1].suit)
+                myself.totalVal=recalculateTotalVal(myself);
+                $("#total").text(myself.totalVal);
+            })
+            
+            socket.on("notTurn",function(data){
+                if(typeof data !="undefined"){
+                    addEvent("It is "+data+"'s turn");
+                }
+                $("#hitBut").hide();
+                $("#stayBut").hide();
+            })
+            socket.on("yourTurn",function(){
+                $("#hitBut").show();
+                $('#stayBut').show();
+            })
+            socket.on("printMe",function(data){
+                //just adds an event to the event list from server
+                addEvent(data);
+            })
+            
+        </script>
+    </body>
+</html>
